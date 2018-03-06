@@ -56,92 +56,132 @@ Example:
 
 
 ******************************************************************************/
+'use strict';
 
-GrowingPacker = function() { };
+function GrowingPacker() {
 
-GrowingPacker.prototype = {
-
-  fit: function(blocks) {
+  this.fit = (blocks) => {
     var n, node, block, len = blocks.length;
     var w = len > 0 ? blocks[0].w : 0;
     var h = len > 0 ? blocks[0].h : 0;
-    this.root = { x: 0, y: 0, w: w, h: h };
+    var d = len > 0 ? blocks[0].d : 0;
+    this.root = { x: 0, y: 0, z: 0, w: w, h: h, d: d };
     for (n = 0; n < len ; n++) {
       block = blocks[n];
-      if (node = this.findNode(this.root, block.w, block.h))
-        block.fit = this.splitNode(node, block.w, block.h);
-      else
-        block.fit = this.growNode(block.w, block.h);
+      if (node = this.findNode(this.root, block.w, block.h, block.d)) {
+        block.fit = this.splitNode(node, block.w, block.h, block.d);
+      } else {
+        block.fit = this.growNode(block.w, block.h, block.d);
+      }
     }
-  },
+  };
 
-  findNode: function(root, w, h) {
+  this.findNode = (root, w, h, d) => {
     if (root.used)
-      return this.findNode(root.right, w, h) || this.findNode(root.down, w, h);
-    else if ((w <= root.w) && (h <= root.h))
+      return this.findNode(root.right, w, h, d)
+          || this.findNode(root.down, w, h, d)
+          || this.findNode(root.above, w, h, d);
+    else if ((w <= root.w) && (h <= root.h) && (d <= root.d))
       return root;
     else
       return null;
-  },
+  };
 
-  splitNode: function(node, w, h) {
+  this.splitNode = (node, w, h, d) => {
     node.used = true;
-    node.down  = { x: node.x,     y: node.y + h, w: node.w,     h: node.h - h };
-    node.right = { x: node.x + w, y: node.y,     w: node.w - w, h: h          };
+    node.right = { x: node.x + w, y: node.y,     z: node.z,     w: node.w - w, h: h         , d: d          };
+    node.down  = { x: node.x,     y: node.y + h, z: node.z,     w: node.w,     h: node.h - h, d: d          };
+    node.above = { x: node.x,     y: node.y,     z: node.z + d, w: node.w,     h: node.h    , d: node.d - d };
     return node;
-  },
+  };
 
-  growNode: function(w, h) {
-    var canGrowDown  = (w <= this.root.w);
-    var canGrowRight = (h <= this.root.h);
+  this.growNode = (w, h, d) => {
+    var canGrowDown  = (w <= this.root.w) && (d <= this.root.d);
+    var canGrowRight = (h <= this.root.h) && (d <= this.root.d);
+    var canGrowAbove = (w <= this.root.w) && (h <= this.root.h);
 
     var shouldGrowRight = canGrowRight && (this.root.h >= (this.root.w + w)); // attempt to keep square-ish by growing right when height is much greater than width
     var shouldGrowDown  = canGrowDown  && (this.root.w >= (this.root.h + h)); // attempt to keep square-ish by growing down  when width  is much greater than height
+    var shouldGrowAbove = canGrowAbove && (this.root.w >= (this.root.d + d) || this.root.h >= (this.root.d + d)); // attempt to keep cube-ish by growing above when width or height is much greater than depth
 
     if (shouldGrowRight)
-      return this.growRight(w, h);
+      return this.growRight(w, h, d);
     else if (shouldGrowDown)
-      return this.growDown(w, h);
+      return this.growDown(w, h, d);
+    else if (shouldGrowAbove)
+      return this.growAbove(w, h, d);
     else if (canGrowRight)
-     return this.growRight(w, h);
+     return this.growRight(w, h, d);
     else if (canGrowDown)
-      return this.growDown(w, h);
+      return this.growDown(w, h, d);
+    else if (canGrowAbove)
+      return this.growAbove(w, h, d);
     else
       return null; // need to ensure sensible root starting size to avoid this happening
-  },
+  };
 
-  growRight: function(w, h) {
+  this.growRight = (w, h, d) => {
+    var node;
+
     this.root = {
       used: true,
       x: 0,
       y: 0,
+      z: 0,
       w: this.root.w + w,
       h: this.root.h,
+      d: this.root.d,
       down: this.root,
-      right: { x: this.root.w, y: 0, w: w, h: this.root.h }
+      right: { x: this.root.w, y: 0, z: 0, w: w, h: this.root.h, d: this.root.d },
+      above: { x: 0, y: 0, z: 0, w: this.root.w, h: this.root.h, d: 0}
     };
-    if (node = this.findNode(this.root, w, h))
-      return this.splitNode(node, w, h);
+    if (node = this.findNode(this.root, w, h, d))
+      return this.splitNode(node, w, h, d);
     else
       return null;
-  },
+  };
 
-  growDown: function(w, h) {
+  this.growDown = (w, h, d) => {
+    var node;
+
     this.root = {
       used: true,
       x: 0,
       y: 0,
+      z: 0,
       w: this.root.w,
       h: this.root.h + h,
-      down:  { x: 0, y: this.root.h, w: this.root.w, h: h },
-      right: this.root
+      d: this.root.d,
+      down:  { x: 0, y: this.root.h, z: 0, w: this.root.w, h: h, d: this.root.d },
+      right: this.root,
+      above: { x: 0, y: 0, z: 0, w: this.root.w, h: this.root.h, d: 0}
     };
-    if (node = this.findNode(this.root, w, h))
-      return this.splitNode(node, w, h);
+    if (node = this.findNode(this.root, w, h, d))
+      return this.splitNode(node, w, h, d);
     else
       return null;
-  }
+  };
 
+  this.growAbove = (w, h, d) => {
+    var node;
+
+    this.root = {
+      used: true,
+      x: 0,
+      y: 0,
+      z: 0,
+      w: this.root.w,
+      h: this.root.h,
+      d: this.root.d + d,
+      right: this.root,
+      down: { x: 0, y: 0, z: 0, w: this.root.w, h: 0, d: this.root.d },
+      above:  { x: 0, y: 0, z: this.root.d, w: this.root.w, h: this.root.h, d: d }
+    };
+    if (node = this.findNode(this.root, w, h, d))
+      return this.splitNode(node, w, h, d);
+    else
+      return null;
+  };
+
+  return this;
 }
-
-
